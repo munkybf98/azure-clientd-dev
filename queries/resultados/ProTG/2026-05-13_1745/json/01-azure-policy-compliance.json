@@ -1,0 +1,18 @@
+[
+  {
+    "subscriptionName": "Azure Protg",
+    "Total": 78,
+    "Compliant": 11,
+    "NonCompliant": 67,
+    "CumplimientoPct": 14.1,
+    "Estado": "Critico (<75%)"
+  },
+  {
+    "subscriptionName": "Microsoft Azure",
+    "Total": 249,
+    "Compliant": 60,
+    "NonCompliant": 189,
+    "CumplimientoPct": 24.1,
+    "Estado": "Critico (<75%)"
+  }
+]
