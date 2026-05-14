@@ -1,0 +1,22 @@
+// ============================================================================
+// NETWORK INTERFACES (NICs) SIN VM ASOCIADA
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual FinOps - "Recursos ociosos detectados"
+//        Indicador de despliegues incompletos o eliminaciones parciales
+// Salida: NICs sin VM asociada (orfanas)
+// Tip:    suelen quedar tras eliminar VMs sin checar dependencias
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.network/networkinterfaces'
+| where isempty(properties.virtualMachine)
+| extend
+    privateIp = tostring(properties.ipConfigurations[0].properties.privateIPAddress),
+    subnetId  = tostring(properties.ipConfigurations[0].properties.subnet.id)
+| project
+    subscriptionId, resourceGroup, name, location,
+    privateIp, subnetId,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by name asc

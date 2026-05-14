@@ -1,0 +1,26 @@
+// ============================================================================
+// INVENTARIO DETALLADO DE APP SERVICES
+// ----------------------------------------------------------------------------
+// Cubre: Matriz de Monitoreo por Recurso - fila "App Service"
+//        Tambien util para seguridad: detecta sites sin HTTPS only
+// Salida: detalle por App Service con kind, estado, HTTPS only y TLS min
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.web/sites'
+| extend
+    appKind       = tostring(kind),
+    state         = tostring(properties.state),
+    httpsOnly     = tobool(properties.httpsOnly),
+    clientCertEnabled = tobool(properties.clientCertEnabled),
+    hostNames     = properties.enabledHostNames,
+    defaultHost   = tostring(properties.defaultHostName)
+| project
+    subscriptionId, resourceGroup, name, location,
+    appKind, state, httpsOnly, clientCertEnabled, defaultHost,
+    environment = tostring(tags['Environment']),
+    application = tostring(tags['Application']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter']),
+    criticality = tostring(tags['Criticality'])
+| order by httpsOnly asc, name asc

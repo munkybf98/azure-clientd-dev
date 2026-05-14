@@ -1,0 +1,23 @@
+// ============================================================================
+// PUBLIC IPs HUERFANAS (SIN ASOCIACION)
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual FinOps - "Recursos ociosos detectados"
+//        Tambien aplica a seguridad (IPs publicas sueltas sin proposito)
+// Salida: Public IPs sin IP Config ni NAT Gateway asociado
+// Tip:    Standard SKU tiene costo fijo mensual; Basic se cobra solo asignada
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.network/publicipaddresses'
+| where isempty(properties.ipConfiguration) and isempty(properties.natGateway)
+| extend
+    skuName  = tostring(sku.name),
+    metodo   = tostring(properties.publicIPAllocationMethod),
+    ip       = tostring(properties.ipAddress)
+| project
+    subscriptionId, resourceGroup, name, location,
+    skuName, metodo, ip,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by skuName asc, name asc

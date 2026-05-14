@@ -1,0 +1,30 @@
+// ============================================================================
+// VMs CON IP PUBLICA DIRECTA
+// ----------------------------------------------------------------------------
+// Cubre: Nivel 4 de madurez: Gobierno y seguridad
+//        Hallazgo Mayor: VM expuesta directamente a Internet sin LB/AppGW
+// Salida: VMs cuyo NIC tiene asociada una Public IP
+// Tip:    en ambientes maduros, las VMs deben estar detras de un balanceador,
+//         Bastion o ExpressRoute. IP publica directa es excepcion documentada.
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.compute/virtualmachines'
+| extend nics = properties.networkProfile.networkInterfaces
+| mv-expand nic = nics
+| extend nicId = tolower(tostring(nic.id))
+| join kind=inner (
+    Resources
+    | where type =~ 'microsoft.network/networkinterfaces'
+    | mv-expand ipConfig = properties.ipConfigurations
+    | extend publicIpId = tostring(ipConfig.properties.publicIPAddress.id)
+    | where isnotempty(publicIpId)
+    | project nicId = tolower(tostring(id)), publicIpId
+) on nicId
+| project
+    subscriptionId, resourceGroup, vmName = name, location, publicIpId,
+    environment = tostring(tags['Environment']),
+    criticality = tostring(tags['Criticality']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by environment asc, vmName asc

@@ -1,0 +1,30 @@
+// ============================================================================
+// CUMPLIMIENTO DE AZURE POLICY POR SUSCRIPCION
+// ----------------------------------------------------------------------------
+// Cubre: KPI Gobierno "Cumplimiento de Azure Policy >= 90%" (Reporte Mensual)
+//        Nivel 4 de madurez: Gobierno y seguridad
+//        Reporte de Gobernanza y Cumplimiento
+// Salida: por suscripcion, total de evaluaciones, compliant, no-compliant y %
+// Nota:   usa la tabla PolicyResources, no Resources
+// ============================================================================
+
+PolicyResources
+| where type == 'microsoft.policyinsights/policystates'
+| extend complianceState = tostring(properties.complianceState)
+| summarize
+    Total        = count(),
+    Compliant    = countif(complianceState =~ 'Compliant'),
+    NonCompliant = countif(complianceState =~ 'NonCompliant')
+    by subscriptionId
+| extend CumplimientoPct = round(100.0 * Compliant / Total, 2)
+| extend Estado = case(
+    CumplimientoPct >= 90, 'OK (>=90%)',
+    CumplimientoPct >= 75, 'Riesgo (75-89%)',
+    'Critico (<75%)')
+| join kind=leftouter (
+    ResourceContainers
+    | where type == 'microsoft.resources/subscriptions'
+    | project subscriptionId, subscriptionName = name
+) on subscriptionId
+| project subscriptionName, Total, Compliant, NonCompliant, CumplimientoPct, Estado
+| order by CumplimientoPct asc

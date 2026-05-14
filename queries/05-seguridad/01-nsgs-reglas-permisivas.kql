@@ -1,0 +1,33 @@
+// ============================================================================
+// REGLAS NSG PERMISIVAS DESDE INTERNET
+// ----------------------------------------------------------------------------
+// Cubre: Nivel 4 de madurez: Gobierno y seguridad
+//        Control ISO A.5.23, A.8.9, A.8.16
+//        Clasificacion de hallazgos: CRITICO (puertos sensibles abiertos)
+// Salida: reglas Inbound Allow desde * / Internet / 0.0.0.0/0 a puertos sensibles
+// Puertos vigilados: 22 SSH, 3389 RDP, 1433 SQL, 3306 MySQL, 5432 PG,
+//                    6379 Redis, 27017 MongoDB, 5985/5986 WinRM, * (cualquiera)
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.network/networksecuritygroups'
+| mv-expand rule = properties.securityRules
+| extend
+    ruleName             = tostring(rule.name),
+    direction            = tostring(rule.properties.direction),
+    access               = tostring(rule.properties.access),
+    protocol             = tostring(rule.properties.protocol),
+    sourceAddressPrefix  = tostring(rule.properties.sourceAddressPrefix),
+    destinationPortRange = tostring(rule.properties.destinationPortRange),
+    priority             = toint(rule.properties.priority)
+| where direction == 'Inbound'
+    and access == 'Allow'
+    and sourceAddressPrefix in ('*', '0.0.0.0/0', 'Internet', 'Any')
+    and destinationPortRange in ('*', '22', '3389', '1433', '3306', '5432',
+                                  '6379', '27017', '5985', '5986')
+| project
+    subscriptionId, resourceGroup, nsgName = name,
+    ruleName, priority, protocol, sourceAddressPrefix, destinationPortRange,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner'])
+| order by destinationPortRange asc, priority asc

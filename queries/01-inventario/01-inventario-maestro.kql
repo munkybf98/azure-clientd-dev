@@ -1,0 +1,28 @@
+// ============================================================================
+// INVENTARIO MAESTRO - Todos los recursos del tenant
+// ----------------------------------------------------------------------------
+// Cubre: Reporte de Inventario (Entregables de Onboarding)
+//        Nivel 1 de madurez: Visibilidad y control
+// Salida: una fila por recurso con suscripcion, RG, tipo, SKU, ubicacion, tags
+// Uso:    base para todos los demas analisis. Exportar a CSV/JSON con timestamp.
+// ============================================================================
+
+Resources
+| project
+    subscriptionId,
+    resourceGroup,
+    name,
+    type,
+    kind,
+    location,
+    sku = tostring(sku.name),
+    skuTier = tostring(sku.tier),
+    tags,
+    id
+| join kind=leftouter (
+    ResourceContainers
+    | where type == 'microsoft.resources/subscriptions'
+    | project subscriptionId, subscriptionName = name
+) on subscriptionId
+| project-away subscriptionId1
+| order by subscriptionName asc, resourceGroup asc, type asc, name asc

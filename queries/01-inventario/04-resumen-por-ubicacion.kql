@@ -1,0 +1,12 @@
+// ============================================================================
+// RESUMEN DE RECURSOS POR UBICACION (REGION)
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual del Servicio (huella geografica)
+//        Util para detectar despliegues fuera del estandar regional
+// Salida: region y cantidad de recursos
+// ============================================================================
+
+Resources
+| where location != ''
+| summarize Cantidad = count() by location
+| order by Cantidad desc

@@ -1,0 +1,31 @@
+// ============================================================================
+// VALIDACION DE FORMATO DE TAGS
+// ----------------------------------------------------------------------------
+// Cubre: Estandar de Etiquetado (Tags) - "Formato y valores"
+//   - Environment: catalogo cerrado [Prod, QA, Dev]
+//   - Owner:       formato email corporativo (regex)
+//   - CostCenter:  formato CC-#### (cuatro digitos numericos)
+//   - BusinessUnit:catalogo cerrado [Finanzas, Comercial, Operaciones, TI, RH]
+// Salida: solo recursos que TIENEN el tag pero con formato/valor invalido
+// Nota:   los recursos sin el tag se ven en la consulta 01-cumplimiento
+// ============================================================================
+
+Resources
+| extend
+    envValue   = tostring(tags['Environment']),
+    ownerValue = tostring(tags['Owner']),
+    ccValue    = tostring(tags['CostCenter']),
+    buValue    = tostring(tags['BusinessUnit'])
+| extend
+    envInvalido   = isnotempty(envValue)   and envValue !in ('Prod', 'QA', 'Dev'),
+    ownerInvalido = isnotempty(ownerValue) and not(ownerValue matches regex @'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$'),
+    ccInvalido    = isnotempty(ccValue)    and not(ccValue matches regex @'^CC-[0-9]{4}$'),
+    buInvalido    = isnotempty(buValue)    and buValue !in ('Finanzas', 'Comercial', 'Operaciones', 'TI', 'RH')
+| where envInvalido or ownerInvalido or ccInvalido or buInvalido
+| project
+    subscriptionId, resourceGroup, name, type,
+    envValue,   envInvalido,
+    ownerValue, ownerInvalido,
+    ccValue,    ccInvalido,
+    buValue,    buInvalido
+| order by name asc

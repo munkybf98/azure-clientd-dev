@@ -1,0 +1,32 @@
+// ============================================================================
+// COBERTURA DE TAGS OBLIGATORIOS POR SUSCRIPCION
+// ----------------------------------------------------------------------------
+// Cubre: KPI FinOps "Cobertura de tags obligatorios por tenant >= 95%"
+//        Reporte de Gobernanza y Cumplimiento (mensual)
+// Salida: por suscripcion, total de recursos, cuantos cumplen y porcentaje
+// Uso:    valor unico por suscripcion, ideal para semaforos en Power BI
+// ============================================================================
+
+Resources
+| extend tagsCompletos =
+    isnotempty(tags['Environment'])
+    and isnotempty(tags['Application'])
+    and isnotempty(tags['Owner'])
+    and isnotempty(tags['CostCenter'])
+    and isnotempty(tags['BusinessUnit'])
+| join kind=leftouter (
+    ResourceContainers
+    | where type == 'microsoft.resources/subscriptions'
+    | project subscriptionId, subscriptionName = name
+) on subscriptionId
+| summarize
+    Total    = count(),
+    Cumple   = countif(tagsCompletos),
+    NoCumple = countif(not(tagsCompletos))
+    by subscriptionName
+| extend CoberturaPct = round(100.0 * Cumple / Total, 2)
+| extend Estado = case(
+    CoberturaPct >= 95, 'OK (>=95%)',
+    CoberturaPct >= 80, 'Riesgo (80-94%)',
+    'Critico (<80%)')
+| order by CoberturaPct asc

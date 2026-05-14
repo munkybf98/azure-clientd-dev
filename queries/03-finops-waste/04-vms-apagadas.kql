@@ -1,0 +1,27 @@
+// ============================================================================
+// VMs APAGADAS O DESASIGNADAS
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual FinOps - rightsizing / waste
+//        VMs en estado 'stopped' (no deallocated) SIGUEN cobrando computo
+//        VMs deallocated solo cobran disco
+// Salida: VMs cuyo powerState NO es 'running'
+// Nota:   requiere ejecutar la consulta con opcion 'allowPartialScopes'
+//         o el flag '-AllowPartialScope' en Search-AzGraph para que
+//         properties.extended.instanceView se popule
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.compute/virtualmachines'
+| extend powerState = tostring(properties.extended.instanceView.powerState.displayStatus)
+| where isnotempty(powerState) and powerState !contains 'running'
+| extend
+    vmSize = tostring(properties.hardwareProfile.vmSize),
+    osType = tostring(properties.storageProfile.osDisk.osType)
+| project
+    subscriptionId, resourceGroup, name, location,
+    vmSize, osType, powerState,
+    environment = tostring(tags['Environment']),
+    criticality = tostring(tags['Criticality']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by powerState asc, name asc

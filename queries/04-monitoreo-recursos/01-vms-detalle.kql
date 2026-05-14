@@ -1,0 +1,28 @@
+// ============================================================================
+// INVENTARIO DETALLADO DE MAQUINAS VIRTUALES
+// ----------------------------------------------------------------------------
+// Cubre: Matriz de Monitoreo por Recurso - fila "VM"
+//        Procedimiento de Monitoreo Operativo
+// Salida: detalle por VM con tamano, OS, tipo de disco, criticidad y owner
+// Uso:    base para llenar la matriz NOC y priorizar Tier1 segun tag Criticality
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.compute/virtualmachines'
+| extend
+    vmSize     = tostring(properties.hardwareProfile.vmSize),
+    osType     = tostring(properties.storageProfile.osDisk.osType),
+    osDiskType = tostring(properties.storageProfile.osDisk.managedDisk.storageAccountType),
+    dataDisks  = array_length(properties.storageProfile.dataDisks),
+    powerState = tostring(properties.extended.instanceView.powerState.displayStatus)
+| project
+    subscriptionId, resourceGroup, name, location,
+    vmSize, osType, osDiskType, dataDisks, powerState,
+    criticality  = tostring(tags['Criticality']),
+    environment  = tostring(tags['Environment']),
+    application  = tostring(tags['Application']),
+    owner        = tostring(tags['Owner']),
+    costCenter   = tostring(tags['CostCenter'])
+| order by
+    iff(criticality == 'Tier1', 1, iff(criticality == 'Tier2', 2, 3)) asc,
+    name asc

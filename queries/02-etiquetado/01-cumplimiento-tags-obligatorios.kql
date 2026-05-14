@@ -1,0 +1,39 @@
+// ============================================================================
+// CUMPLIMIENTO DE TAGS OBLIGATORIOS POR RECURSO
+// ----------------------------------------------------------------------------
+// Cubre: Estandar de Etiquetado (Tags) - los 6 tags obligatorios
+//        KPI: Cobertura de tags obligatorios >= 95% (Reporte FinOps mensual)
+// Tags evaluados: Environment, Application, Owner, CostCenter, BusinessUnit, Client
+// Salida: cada recurso con bandera de cumplimiento total y lista de tags faltantes
+// Nota:   Client aplica solo en suscripciones multicliente; ajustar si es single-tenant
+// ============================================================================
+
+Resources
+| extend
+    hasEnvironment  = isnotempty(tags['Environment']),
+    hasApplication  = isnotempty(tags['Application']),
+    hasOwner        = isnotempty(tags['Owner']),
+    hasCostCenter   = isnotempty(tags['CostCenter']),
+    hasBusinessUnit = isnotempty(tags['BusinessUnit']),
+    hasClient       = isnotempty(tags['Client'])
+| extend
+    tagsCompletos = hasEnvironment and hasApplication and hasOwner
+                    and hasCostCenter and hasBusinessUnit and hasClient,
+    tagsFaltantes = strcat(
+        iff(not(hasEnvironment),  'Environment;',  ''),
+        iff(not(hasApplication),  'Application;',  ''),
+        iff(not(hasOwner),        'Owner;',        ''),
+        iff(not(hasCostCenter),   'CostCenter;',   ''),
+        iff(not(hasBusinessUnit), 'BusinessUnit;', ''),
+        iff(not(hasClient),       'Client;',       '')
+    )
+| project
+    subscriptionId, resourceGroup, name, type, location,
+    tagsCompletos, tagsFaltantes,
+    environment  = tostring(tags['Environment']),
+    application  = tostring(tags['Application']),
+    owner        = tostring(tags['Owner']),
+    costCenter   = tostring(tags['CostCenter']),
+    businessUnit = tostring(tags['BusinessUnit']),
+    client       = tostring(tags['Client'])
+| order by tagsCompletos asc, type asc, name asc

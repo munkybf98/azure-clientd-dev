@@ -1,0 +1,5 @@
+"subscriptionId","resourceGroup","name","location","vmSize","osType","osDiskType","dataDisks","powerState","criticality","environment","application","owner","costCenter"
+"b428f40f-25ce-4000-b888-b850b9ffd789","extraccion-de-datos-etl","VM-SQL-ETL","eastus","Standard_B2as_v2","Windows","Standard_LRS","3","VM running","","","","",""
+"b428f40f-25ce-4000-b888-b850b9ffd789","glpi-protg","vm-glpi","eastus","Standard_F8s_v2","Linux","Premium_LRS","0","VM running","","","","",""
+"720bb4fd-9e4d-4525-95e6-3f6dfcfc6c78","rgprotgprod","vmContpaq","southcentralus","Standard_D2s_v3","Windows","Premium_LRS","1","VM running","","","","",""
+"720bb4fd-9e4d-4525-95e6-3f6dfcfc6c78","rgprotgprod","vmDataBaseptg","southcentralus","Standard_D4s_v3","Windows","Premium_LRS","2","VM running","","","","",""

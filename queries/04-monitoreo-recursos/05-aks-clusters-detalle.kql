@@ -1,0 +1,29 @@
+// ============================================================================
+// INVENTARIO DETALLADO DE CLUSTERS AKS
+// ----------------------------------------------------------------------------
+// Cubre: Matriz de Monitoreo por Recurso - fila "AKS"
+// Salida: detalle por cluster con version K8s, RBAC, private cluster, node pools
+// Tip:    versiones de K8s fuera de soporte son hallazgo Mayor de seguridad
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.containerservice/managedclusters'
+| extend
+    kubernetesVersion = tostring(properties.kubernetesVersion),
+    provisioningState = tostring(properties.provisioningState),
+    powerState        = tostring(properties.powerState.code),
+    nodeResourceGroup = tostring(properties.nodeResourceGroup),
+    rbacEnabled       = tobool(properties.enableRBAC),
+    privateCluster    = tobool(properties.apiServerAccessProfile.enablePrivateCluster),
+    nodePools         = array_length(properties.agentPoolProfiles),
+    skuTier           = tostring(sku.tier)
+| project
+    subscriptionId, resourceGroup, name, location,
+    kubernetesVersion, provisioningState, powerState,
+    rbacEnabled, privateCluster, nodePools, skuTier,
+    environment = tostring(tags['Environment']),
+    application = tostring(tags['Application']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter']),
+    criticality = tostring(tags['Criticality'])
+| order by kubernetesVersion asc, name asc

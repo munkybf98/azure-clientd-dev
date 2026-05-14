@@ -1,0 +1,25 @@
+// ============================================================================
+// DISCOS NO ASOCIADOS (UNATTACHED)
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual FinOps - "Recursos ociosos detectados"
+//        KPI: Recursos ociosos detectados y resueltos >= 80% en 60 dias
+//        Nivel 3 de madurez: Optimizacion y FinOps
+// Salida: discos sin VM asociada, con tamano, SKU y fecha de creacion
+// Tip:    multiplica sizeGB por el precio de SKU para estimar el ahorro mensual
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.compute/disks'
+| where managedBy == '' and tostring(properties.diskState) == 'Unattached'
+| extend
+    sizeGB         = toint(properties.diskSizeGB),
+    skuName        = tostring(sku.name),
+    creado         = todatetime(properties.timeCreated),
+    antiguedadDias = datetime_diff('day', now(), todatetime(properties.timeCreated))
+| project
+    subscriptionId, resourceGroup, name, location,
+    sizeGB, skuName, creado, antiguedadDias,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by sizeGB desc

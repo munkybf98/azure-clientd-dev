@@ -1,0 +1,27 @@
+// ============================================================================
+// INVENTARIO DETALLADO DE AZURE SQL DATABASES
+// ----------------------------------------------------------------------------
+// Cubre: Matriz de Monitoreo por Recurso - fila "Azure SQL"
+// Salida: detalle por base con tier, capacidad, tamano maximo y estado
+// Nota:   excluye la base 'master' que es del sistema
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.sql/servers/databases'
+| where name !endswith '/master'
+| extend
+    skuName     = tostring(sku.name),
+    skuTier     = tostring(sku.tier),
+    skuCapacity = toint(sku.capacity),
+    status      = tostring(properties.status),
+    maxSizeGB   = round(todouble(properties.maxSizeBytes) / 1024 / 1024 / 1024, 2),
+    zoneRedundant = tobool(properties.zoneRedundant)
+| project
+    subscriptionId, resourceGroup, name, location,
+    skuName, skuTier, skuCapacity, status, maxSizeGB, zoneRedundant,
+    environment = tostring(tags['Environment']),
+    application = tostring(tags['Application']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter']),
+    criticality = tostring(tags['Criticality'])
+| order by skuTier asc, name asc

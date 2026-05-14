@@ -1,0 +1,23 @@
+// ============================================================================
+// SNAPSHOTS ANTIGUOS (> 90 DIAS)
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual FinOps - "Recursos ociosos detectados"
+//        Snapshots olvidados son una fuga comun y silenciosa de costo
+// Salida: snapshots con mas de 90 dias de antiguedad, ordenados por tamano
+// Tip:    ajustar el umbral (90) segun la politica de retencion del cliente
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.compute/snapshots'
+| extend
+    sizeGB         = toint(properties.diskSizeGB),
+    creado         = todatetime(properties.timeCreated),
+    antiguedadDias = datetime_diff('day', now(), todatetime(properties.timeCreated))
+| where antiguedadDias > 90
+| project
+    subscriptionId, resourceGroup, name, location,
+    sizeGB, creado, antiguedadDias,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter'])
+| order by antiguedadDias desc

@@ -1,0 +1,23 @@
+// ============================================================================
+// RESUMEN DE RECURSOS POR SUSCRIPCION
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual del Servicio (distribucion por tenant/suscripcion)
+//        Base para calcular costos por tag (combinar con Cost Management API)
+// Salida: suscripcion, total de recursos, cantidad por ambiente (Prod/QA/Dev)
+// ============================================================================
+
+Resources
+| extend env = tostring(tags['Environment'])
+| join kind=leftouter (
+    ResourceContainers
+    | where type == 'microsoft.resources/subscriptions'
+    | project subscriptionId, subscriptionName = name
+) on subscriptionId
+| summarize
+    Total = count(),
+    Prod  = countif(env =~ 'Prod'),
+    QA    = countif(env =~ 'QA'),
+    Dev   = countif(env =~ 'Dev'),
+    SinEnv = countif(isempty(env))
+    by subscriptionName
+| order by Total desc

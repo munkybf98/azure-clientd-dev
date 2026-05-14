@@ -1,0 +1,33 @@
+// ============================================================================
+// INVENTARIO DETALLADO DE STORAGE ACCOUNTS (CON ENFOQUE DE SEGURIDAD)
+// ----------------------------------------------------------------------------
+// Cubre: Matriz de Monitoreo por Recurso - fila "Storage"
+//        Nivel 4 de madurez: Gobierno y seguridad
+//        Control ISO A.5.23, A.8.9
+// Salida: detalle por Storage con SKU, tier, banderas de seguridad (HTTPS,
+//         TLS minimo, acceso publico blob, acceso a red publica)
+// Tip:    los recursos con publicBlobAccess=true o publicNetworkAccess=Enabled
+//         son los primeros candidatos a remediar
+// ============================================================================
+
+Resources
+| where type =~ 'microsoft.storage/storageaccounts'
+| extend
+    skuName             = tostring(sku.name),
+    skuTier             = tostring(sku.tier),
+    kind                = tostring(kind),
+    accessTier          = tostring(properties.accessTier),
+    httpsOnly           = tobool(properties.supportsHttpsTrafficOnly),
+    minTlsVersion       = tostring(properties.minimumTlsVersion),
+    publicBlobAccess    = tobool(properties.allowBlobPublicAccess),
+    publicNetworkAccess = tostring(properties.publicNetworkAccess),
+    sharedKeyAccess     = tobool(properties.allowSharedKeyAccess)
+| project
+    subscriptionId, resourceGroup, name, location,
+    skuName, kind, accessTier,
+    httpsOnly, minTlsVersion, publicBlobAccess, publicNetworkAccess, sharedKeyAccess,
+    environment = tostring(tags['Environment']),
+    owner       = tostring(tags['Owner']),
+    costCenter  = tostring(tags['CostCenter']),
+    dataClassification = tostring(tags['DataClassification'])
+| order by publicBlobAccess desc, httpsOnly asc, name asc

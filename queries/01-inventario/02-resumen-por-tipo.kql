@@ -1,0 +1,11 @@
+// ============================================================================
+// RESUMEN DE RECURSOS POR TIPO
+// ----------------------------------------------------------------------------
+// Cubre: Reporte Mensual del Servicio (resumen ejecutivo)
+//        Util para grafico de barras o pie chart en Power BI / Excel
+// Salida: tipo de recurso y cantidad, ordenado por volumen
+// ============================================================================
+
+Resources
+| summarize Cantidad = count() by type
+| order by Cantidad desc
