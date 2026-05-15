@@ -1,0 +1,20 @@
+Resources
+| extend
+    totalTags = array_length(bag_keys(tags))
+| extend
+    estadoEtiquetado = case(
+        totalTags == 0, "Sin etiquetas",
+        totalTags between (1 .. 2), "Etiquetado bajo",
+        totalTags between (3 .. 5), "Etiquetado medio",
+        "Etiquetado alto"
+    )
+| project
+    subscriptionId,
+    resourceGroup,
+    name,
+    type,
+    location,
+    totalTags,
+    estadoEtiquetado,
+    tagsActuales = tostring(tags)
+| order by totalTags desc

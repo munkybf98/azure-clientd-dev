@@ -1,0 +1,70 @@
+[
+  {
+    "Etiqueta": "",
+    "RecursosQueLaUsan": 58
+  },
+  {
+    "Etiqueta": "Application",
+    "RecursosQueLaUsan": 18
+  },
+  {
+    "Etiqueta": "CostCenter",
+    "RecursosQueLaUsan": 18
+  },
+  {
+    "Etiqueta": "Environment",
+    "RecursosQueLaUsan": 18
+  },
+  {
+    "Etiqueta": "Client",
+    "RecursosQueLaUsan": 18
+  },
+  {
+    "Etiqueta": "version",
+    "RecursosQueLaUsan": 10
+  },
+  {
+    "Etiqueta": "Ambiente",
+    "RecursosQueLaUsan": 6
+  },
+  {
+    "Etiqueta": "Aplicación",
+    "RecursosQueLaUsan": 4
+  },
+  {
+    "Etiqueta": "ms-resource-usage",
+    "RecursosQueLaUsan": 2
+  },
+  {
+    "Etiqueta": "aplicacion",
+    "RecursosQueLaUsan": 2
+  },
+  {
+    "Etiqueta": "RSVaultBackup",
+    "RecursosQueLaUsan": 2
+  },
+  {
+    "Etiqueta": "OSTickets",
+    "RecursosQueLaUsan": 1
+  },
+  {
+    "Etiqueta": "hidden-link: /app-insights-instrumentation-key",
+    "RecursosQueLaUsan": 1
+  },
+  {
+    "Etiqueta": "ServiceResourceId",
+    "RecursosQueLaUsan": 1
+  },
+  {
+    "Etiqueta": "hidden-link: /app-insights-conn-string",
+    "RecursosQueLaUsan": 1
+  },
+  {
+    "Etiqueta": "StartStopVMVersion",
+    "RecursosQueLaUsan": 1
+  },
+  {
+    "Etiqueta": "hidden-link: /app-insights-resource-id",
+    "RecursosQueLaUsan": 1
+  }
+]

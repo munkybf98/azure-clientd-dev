@@ -1,0 +1,12 @@
+Resources
+| extend tagKeys = bag_keys(tags)
+| extend totalTags = array_length(tagKeys)
+| extend tieneTags = totalTags > 0
+| summarize
+    TotalRecursos = count(),
+    RecursosConEtiquetas = countif(tieneTags),
+    RecursosSinEtiquetas = countif(not(tieneTags)),
+    TotalEtiquetasAplicadas = sum(totalTags),
+    PromedioEtiquetasPorRecurso = round(avg(totalTags), 2),
+    MaxEtiquetasEnUnRecurso = max(totalTags)
+| extend CoberturaEtiquetadoPct = round(100.0 * RecursosConEtiquetas / TotalRecursos, 2)

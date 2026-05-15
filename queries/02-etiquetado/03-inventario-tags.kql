@@ -1,0 +1,6 @@
+Resources
+| mv-expand tagName = bag_keys(tags)
+| summarize
+    RecursosQueLaUsan = count()
+    by Etiqueta = tostring(tagName)
+| order by RecursosQueLaUsan desc

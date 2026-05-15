@@ -265,14 +265,19 @@ def calculate_health_score(data: dict) -> tuple[int, list[dict]]:
     """Calcula un score 0-100 con desglose por componente."""
     components = []
 
-    # 1) Cobertura de tags (25 puntos)
+    # 1) Cobertura de etiquetado real (25 puntos)
     tc = data.get("tags_cob")
-    if tc is not None and not tc.empty and "CoberturaPct" in tc.columns:
+    if tc is not None and not tc.empty and "CoberturaEtiquetadoPct" in tc.columns:
+        cov = tc["CoberturaEtiquetadoPct"].mean()
+        avg_tags = tc["PromedioEtiquetasPorRecurso"].mean() if "PromedioEtiquetasPorRecurso" in tc.columns else 0
+        s = (cov / 100) * 25
+        det = f"{cov:.0f}% de recursos con etiquetas; promedio {avg_tags:.1f} tags/recurso"
+    elif tc is not None and not tc.empty and "CoberturaPct" in tc.columns:
         cov = tc["CoberturaPct"].mean()
         s = (cov / 100) * 25
-        det = f"{cov:.0f}% de cobertura promedio (meta 95%)"
+        det = f"{cov:.0f}% de cobertura de etiquetado en snapshot anterior"
     else:
-        s, det = 12, "Sin datos de cobertura — score neutral"
+        s, det = 12, "Sin datos de etiquetado — score neutral"
     components.append({"nombre": "Etiquetado", "score": round(s, 1),
                        "max": 25, "detalle": det})
 
@@ -411,29 +416,27 @@ def generate_top_actions(data: dict) -> list[dict]:
                      "3) Eliminar la Public IP del NIC de la VM."),
         })
 
-    # Cobertura de tags
+    # Cobertura de etiquetado real
     tc = data.get("tags_cob")
-    if tc is not None and not tc.empty and "CoberturaPct" in tc.columns:
-        cov = tc["CoberturaPct"].mean()
-        if cov < 95:
-            sub_bajo = tc[tc["CoberturaPct"] < 95]
-            n_subs = len(sub_bajo)
-            sev = "ALTO" if cov < 80 else "MEDIO"
-            pri = 75 if cov < 80 else 50
+    if tc is not None and not tc.empty and "CoberturaEtiquetadoPct" in tc.columns:
+        cov = tc["CoberturaEtiquetadoPct"].mean()
+        sin_tags = int(tc["RecursosSinEtiquetas"].sum()) if "RecursosSinEtiquetas" in tc.columns else 0
+        if sin_tags > 0:
+            sev = "ALTO" if cov < 70 else "MEDIO"
+            pri = 75 if cov < 70 else 50
             actions.append({
                 "prioridad": pri,
                 "severidad": sev,
-                "titulo": f"Completar etiquetas en recursos sin tags ({cov:.0f}% actual, meta 95%)",
-                "descripcion": (f"La cobertura promedio de tags obligatorios es {cov:.0f}%, debajo del 95% "
-                                f"que marca el estándar. {n_subs} suscripción(es) están debajo de la meta. "
-                                f"Sin tags no se puede atribuir costo, asignar responsables ni gestionar "
-                                f"el ciclo de vida de los recursos."),
+                "titulo": f"Etiquetar {sin_tags} recurso(s) sin metadata ({cov:.0f}% cobertura actual)",
+                "descripcion": (f"El análisis actual ya no exige 6 etiquetas obligatorias. "
+                                f"Se mide la cobertura real: recursos con al menos una etiqueta, "
+                                f"volumen total de etiquetas y promedio por recurso. Hay {sin_tags} recurso(s) "
+                                f"sin ninguna etiqueta aplicada."),
                 "impacto": "Medio",
                 "esfuerzo": "Medio",
-                "como": ("1) Identificar dueño técnico y de negocio de cada recurso sin tags. "
-                         "2) Aplicar los 6 tags obligatorios (Environment, Application, Owner, "
-                         "CostCenter, BusinessUnit, Client). "
-                         "3) Configurar Azure Policy 'Require Tag' para evitar nuevos recursos sin tags."),
+                "como": ("1) Priorizar recursos productivos o con costo alto sin etiquetas. "
+                         "2) Definir etiquetas mínimas por operación/costo según el cliente. "
+                         "3) Normalizar nombres duplicados como Ambiente/Environment y Aplicación/Application."),
             })
 
     # Storage con acceso publico
@@ -631,8 +634,19 @@ resumen_tipo = load_csv(csv_path, "02-resumen-por-tipo.csv")
 resumen_sub = load_csv(csv_path, "03-resumen-por-suscripcion.csv")
 resumen_loc = load_csv(csv_path, "04-resumen-por-ubicacion.csv")
 
-tags_cump = load_csv(csv_path, "01-cumplimiento-tags-obligatorios.csv")
-tags_cob = load_csv(csv_path, "02-cobertura-por-suscripcion.csv")
+# Etiquetado actual: enfoque de inventario/cobertura real, no cumplimiento obligatorio de 6 tags.
+# Mantiene compatibilidad con nombres anteriores si todavía existen en snapshots viejos.
+tags_cob = load_csv(csv_path, "01-cobertura-etiquetado.csv")
+tags_det = load_csv(csv_path, "02-detalle-etiquetado.csv")
+tags_inv = load_csv(csv_path, "03-inventario-tags.csv")
+
+if tags_cob is None:
+    tags_cob = load_csv(csv_path, "02-cobertura-por-suscripcion.csv")
+if tags_det is None:
+    tags_det = load_csv(csv_path, "01-cumplimiento-tags-obligatorios.csv")
+if tags_inv is None:
+    tags_inv = load_csv(csv_path, "03-validacion-formato-tags.csv")
+
 tags_val = load_csv(csv_path, "03-validacion-formato-tags.csv")
 
 discos_orf = load_csv(csv_path, "01-discos-no-asociados.csv")
@@ -685,10 +699,17 @@ with c2:
     st.metric("Suscripciones", n_subs)
 
 with c3:
-    if tags_cob is not None and not tags_cob.empty and "CoberturaPct" in tags_cob.columns:
-        cob = tags_cob["CoberturaPct"].mean()
-        st.metric("Cobertura Tags", f"{cob:.1f}%",
-                  delta="Meta 95%", delta_color="off")
+    if tags_cob is not None and not tags_cob.empty:
+        if "CoberturaEtiquetadoPct" in tags_cob.columns:
+            cob = tags_cob["CoberturaEtiquetadoPct"].mean()
+            st.metric("Cobertura Tags", f"{cob:.1f}%",
+                      delta="Recursos con al menos 1 etiqueta", delta_color="off")
+        elif "CoberturaPct" in tags_cob.columns:
+            cob = tags_cob["CoberturaPct"].mean()
+            st.metric("Cobertura Tags", f"{cob:.1f}%",
+                      delta="Snapshot anterior", delta_color="off")
+        else:
+            st.metric("Cobertura Tags", "—")
     else:
         st.metric("Cobertura Tags", "—")
 
@@ -742,7 +763,7 @@ with tab_summary:
     # Empaquetar datos para los helpers
     _data = {
         "inventario": inventario, "resumen_sub": resumen_sub,
-        "tags_cob": tags_cob, "tags_cump": tags_cump, "tags_val": tags_val,
+        "tags_cob": tags_cob, "tags_det": tags_det, "tags_inv": tags_inv, "tags_val": tags_val,
         "discos_orf": discos_orf, "ips_huerf": ips_huerf, "nics_orf": nics_orf,
         "vms_off": vms_off, "snaps_old": snaps_old,
         "vms": vms, "apps": apps, "sqls": sqls, "storages": storages, "aks": aks,
@@ -976,119 +997,240 @@ with tab_inv:
 # TAB: TAGS
 # ----------------------------------------------------------------------------
 with tab_tags:
-    callout("Sin etiquetas no se puede saber a qué aplicación, dueño o centro de costo pertenece cada recurso. La meta del estándar es 95% de cobertura en los 6 tags obligatorios: Environment, Application, Owner, CostCenter, BusinessUnit, Client.", kind="info")
-    section_header("Cobertura de Tags Obligatorios")
-    st.caption("Tags evaluados: Environment, Application, Owner, CostCenter, BusinessUnit, Client")
+    callout(
+        "Esta sección muestra el etiquetado real del entorno. Ya no se evalúa como obligación tener 6 etiquetas fijas; "
+        "ahora se mide cobertura, cantidad total de etiquetas, promedio por recurso, recursos sin etiquetas y etiquetas más utilizadas.",
+        kind="info",
+    )
 
-    cA, cB = st.columns(2)
+    # Normalización defensiva para soportar snapshots actuales y anteriores.
+    tag_cov_col = "CoberturaEtiquetadoPct" if tags_cob is not None and "CoberturaEtiquetadoPct" in tags_cob.columns else "CoberturaPct"
+    detail_df = tags_det
 
-    with cA:
-        st.markdown("**Cobertura por Suscripción**")
-        if tags_cob is not None and not tags_cob.empty:
-            fig = px.bar(
-                tags_cob.sort_values("CoberturaPct"),
-                x="CoberturaPct",
-                y="subscriptionName",
-                orientation="h",
-                color="CoberturaPct",
-                color_continuous_scale=[
-                    [0, COLOR_DANGER], [0.8, COLOR_WARN], [0.95, COLOR_OK], [1, COLOR_OK]
-                ],
-                range_color=[0, 100],
-                text="CoberturaPct",
-            )
-            fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-            fig.add_vline(x=95, line_dash="dash", line_color=COLOR_OK,
-                          annotation_text="Meta 95%", annotation_position="top right")
-            fig.update_layout(
-                height=300,
-                xaxis_title="Cobertura (%)",
-                yaxis_title=None,
-                xaxis_range=[0, 110],
-                coloraxis_showscale=False,
-                margin=dict(l=10, r=10, t=30, b=10),
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    section_header("Resumen de etiquetado")
 
-            st.dataframe(tags_cob, use_container_width=True, hide_index=True)
-        else:
-            empty_state("Sin datos de cobertura")
+    if tags_cob is not None and not tags_cob.empty:
+        total_recursos_tags = int(tags_cob["TotalRecursos"].sum()) if "TotalRecursos" in tags_cob.columns else 0
+        recursos_con_tags = int(tags_cob["RecursosConEtiquetas"].sum()) if "RecursosConEtiquetas" in tags_cob.columns else 0
+        recursos_sin_tags = int(tags_cob["RecursosSinEtiquetas"].sum()) if "RecursosSinEtiquetas" in tags_cob.columns else 0
+        total_etiquetas = int(tags_cob["TotalEtiquetasAplicadas"].sum()) if "TotalEtiquetasAplicadas" in tags_cob.columns else 0
+        promedio_tags = float(tags_cob["PromedioEtiquetasPorRecurso"].mean()) if "PromedioEtiquetasPorRecurso" in tags_cob.columns else 0.0
+        cobertura = (recursos_con_tags / total_recursos_tags * 100) if total_recursos_tags else 0
 
-    with cB:
-        st.markdown("**Cumplimiento Global**")
-        if tags_cump is not None and not tags_cump.empty:
-            tags_completos_bool = to_bool_series(tags_cump["tagsCompletos"]) if "tagsCompletos" in tags_cump.columns else pd.Series([False] * len(tags_cump))
-            cumple = int(tags_completos_bool.sum())
-            total = len(tags_cump)
-            no_cumple = total - cumple
+        k1, k2, k3, k4, k5 = st.columns(5)
+        k1.metric("Recursos evaluados", f"{total_recursos_tags:,}")
+        k2.metric("Con etiquetas", f"{recursos_con_tags:,}", delta=f"{cobertura:.1f}% cobertura", delta_color="off")
+        k3.metric("Sin etiquetas", f"{recursos_sin_tags:,}", delta="Revisar" if recursos_sin_tags else "OK", delta_color="inverse" if recursos_sin_tags else "normal")
+        k4.metric("Total etiquetas", f"{total_etiquetas:,}")
+        k5.metric("Promedio tags/recurso", f"{promedio_tags:.2f}")
 
+        st.divider()
+
+        cA, cB = st.columns([3, 2])
+
+        with cA:
+            st.markdown("**Cobertura de etiquetado por suscripción**")
+            if tag_cov_col in tags_cob.columns:
+                y_col = "subscriptionName" if "subscriptionName" in tags_cob.columns else None
+                if y_col:
+                    fig = px.bar(
+                        tags_cob.sort_values(tag_cov_col),
+                        x=tag_cov_col,
+                        y=y_col,
+                        orientation="h",
+                        color=tag_cov_col,
+                        color_continuous_scale=[
+                            [0, COLOR_DANGER],
+                            [0.5, COLOR_WARN],
+                            [0.85, COLOR_OK],
+                            [1, COLOR_OK],
+                        ],
+                        range_color=[0, 100],
+                        text=tag_cov_col,
+                    )
+                    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+                    fig.update_layout(
+                        height=320,
+                        xaxis_title="Recursos con al menos una etiqueta (%)",
+                        yaxis_title=None,
+                        xaxis_range=[0, 110],
+                        coloraxis_showscale=False,
+                        margin=dict(l=10, r=10, t=30, b=10),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    empty_state("El CSV de cobertura no contiene subscriptionName.")
+            else:
+                empty_state("El CSV de cobertura no contiene columna de porcentaje.")
+
+        with cB:
+            st.markdown("**Distribución global**")
             fig = go.Figure(data=[go.Pie(
-                labels=["Con todos los tags", "Con tags faltantes"],
-                values=[cumple, no_cumple],
+                labels=["Con etiquetas", "Sin etiquetas"],
+                values=[recursos_con_tags, recursos_sin_tags],
                 hole=0.65,
                 marker=dict(colors=[COLOR_OK, COLOR_DANGER]),
             )])
             fig.update_traces(textposition="outside", textinfo="label+percent+value")
             fig.update_layout(
-                height=300,
+                height=320,
                 showlegend=False,
                 annotations=[dict(
-                    text=f"{cumple/total*100:.0f}%" if total else "—",
-                    x=0.5, y=0.5, font_size=28, showarrow=False
+                    text=f"{cobertura:.0f}%",
+                    x=0.5,
+                    y=0.5,
+                    font_size=28,
+                    showarrow=False,
                 )],
                 margin=dict(l=10, r=10, t=30, b=10),
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Tags más faltantes (recuento por tag)
-            if "tagsFaltantes" in tags_cump.columns:
-                st.markdown("**Tags más ausentes**")
-                tag_names = ["Environment", "Application", "Owner",
-                             "CostCenter", "BusinessUnit", "Client"]
-                counts = {
-                    t: tags_cump["tagsFaltantes"].fillna("").str.contains(t, regex=False).sum()
-                    for t in tag_names
-                }
-                tag_df = pd.DataFrame(
-                    {"Tag": list(counts.keys()), "Faltante en N recursos": list(counts.values())}
-                ).sort_values("Faltante en N recursos", ascending=True)
-                fig = px.bar(
-                    tag_df,
-                    x="Faltante en N recursos",
-                    y="Tag",
-                    orientation="h",
-                    color_discrete_sequence=[COLOR_WARN],
-                )
-                fig.update_layout(
-                    height=240,
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    yaxis_title=None,
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            empty_state("Sin datos de cumplimiento")
+        st.markdown("**Dataset de cobertura**")
+        st.dataframe(tags_cob, use_container_width=True, hide_index=True)
+    else:
+        empty_state("Sin datos de cobertura de etiquetado. Verifica que exista 01-cobertura-etiquetado.csv.")
 
     st.divider()
 
-    st.markdown("**Recursos con Tags Incompletos**")
-    if tags_cump is not None and not tags_cump.empty:
-        if "tagsCompletos" in tags_cump.columns:
-            mask_completos = to_bool_series(tags_cump["tagsCompletos"])
-            faltantes_df = tags_cump[~mask_completos]
-            if not faltantes_df.empty:
-                cols_show = [c for c in ["resourceGroup", "name", "type", "location",
-                                          "tagsFaltantes", "environment", "owner"]
-                             if c in faltantes_df.columns]
-                st.dataframe(faltantes_df[cols_show], use_container_width=True,
-                             height=350, hide_index=True)
-            else:
-                callout("Todos los recursos tienen los tags obligatorios completos.", kind="success")
+    section_header("Inventario de etiquetas existentes", "Frecuencia de uso de cada etiqueta detectada en los recursos.")
+
+    if tags_inv is not None and not tags_inv.empty:
+        # Soporta columnas nuevas: Etiqueta, RecursosQueLaUsan
+        # y también snapshots anteriores si el archivo trae otra forma.
+        if "Etiqueta" in tags_inv.columns and "RecursosQueLaUsan" in tags_inv.columns:
+            tag_usage = tags_inv.copy()
+            tag_usage["RecursosQueLaUsan"] = pd.to_numeric(tag_usage["RecursosQueLaUsan"], errors="coerce").fillna(0)
+            top_tags = tag_usage.sort_values("RecursosQueLaUsan", ascending=False).head(20)
+
+            cA, cB = st.columns([3, 2])
+
+            with cA:
+                fig = px.bar(
+                    top_tags.sort_values("RecursosQueLaUsan"),
+                    x="RecursosQueLaUsan",
+                    y="Etiqueta",
+                    orientation="h",
+                    color="RecursosQueLaUsan",
+                    color_continuous_scale=[[0, "#deecf9"], [1, COLOR_PRIMARY]],
+                    text="RecursosQueLaUsan",
+                )
+                fig.update_traces(textposition="outside")
+                fig.update_layout(
+                    height=520,
+                    xaxis_title="Recursos que usan la etiqueta",
+                    yaxis_title=None,
+                    coloraxis_showscale=False,
+                    margin=dict(l=10, r=10, t=20, b=10),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            with cB:
+                st.markdown("**Lectura ejecutiva**")
+                total_tag_names = tag_usage["Etiqueta"].nunique()
+                most_used = tag_usage.iloc[0] if not tag_usage.empty else None
+                callout(
+                    f"Se detectaron <strong>{total_tag_names}</strong> nombres de etiquetas diferentes. "
+                    "Esto ayuda a identificar etiquetas duplicadas, variaciones de idioma o nombres no estandarizados.",
+                    kind="info",
+                )
+                if most_used is not None:
+                    callout(
+                        f"La etiqueta más utilizada es <strong>{most_used['Etiqueta']}</strong>, presente en "
+                        f"<strong>{int(most_used['RecursosQueLaUsan'])}</strong> recurso(s).",
+                        kind="success",
+                    )
+                possible_duplicates = tag_usage[
+                    tag_usage["Etiqueta"].astype(str).str.lower().str.contains("ambiente|environment|aplicaci|application", regex=True, na=False)
+                ]
+                if not possible_duplicates.empty:
+                    st.markdown("**Posibles etiquetas equivalentes a normalizar**")
+                    st.dataframe(possible_duplicates, use_container_width=True, hide_index=True)
+
+            st.markdown("**Todas las etiquetas detectadas**")
+            st.dataframe(tag_usage, use_container_width=True, hide_index=True)
+        else:
+            st.dataframe(tags_inv, use_container_width=True, hide_index=True)
     else:
-        empty_state("Sin datos")
+        empty_state("Sin inventario de etiquetas. Verifica que exista 03-inventario-tags.csv.")
+
+    st.divider()
+
+    section_header("Detalle por recurso", "Nivel de etiquetado por recurso y etiquetas actuales.")
+
+    if detail_df is not None and not detail_df.empty:
+        # Compatibilidad con la nueva consulta 02-detalle-etiquetado.kql
+        if "totalTags" in detail_df.columns:
+            detail_display = detail_df.copy()
+            detail_display["totalTags"] = pd.to_numeric(detail_display["totalTags"], errors="coerce").fillna(0).astype(int)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Sin etiquetas", int((detail_display["totalTags"] == 0).sum()))
+            c2.metric("Etiquetado bajo", int(((detail_display["totalTags"] >= 1) & (detail_display["totalTags"] <= 2)).sum()))
+            c3.metric("Etiquetado medio", int(((detail_display["totalTags"] >= 3) & (detail_display["totalTags"] <= 5)).sum()))
+            c4.metric("Etiquetado alto", int((detail_display["totalTags"] >= 6).sum()))
+
+            if "estadoEtiquetado" in detail_display.columns:
+                order = ["Sin etiquetas", "Etiquetado bajo", "Etiquetado medio", "Etiquetado alto"]
+                state_counts = (
+                    detail_display["estadoEtiquetado"]
+                    .value_counts()
+                    .reindex(order)
+                    .dropna()
+                    .reset_index()
+                )
+                state_counts.columns = ["estadoEtiquetado", "Cantidad"]
+
+                fig = px.bar(
+                    state_counts,
+                    x="estadoEtiquetado",
+                    y="Cantidad",
+                    text="Cantidad",
+                    color="Cantidad",
+                    color_continuous_scale=[[0, "#deecf9"], [1, COLOR_PRIMARY]],
+                )
+                fig.update_traces(textposition="outside")
+                fig.update_layout(
+                    height=300,
+                    xaxis_title=None,
+                    yaxis_title="Recursos",
+                    coloraxis_showscale=False,
+                    margin=dict(l=10, r=10, t=30, b=10),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("**Recursos y etiquetas actuales**")
+            preferred_cols = [
+                "subscriptionName", "subscriptionId", "resourceGroup", "name", "type",
+                "location", "totalTags", "estadoEtiquetado", "tagsActuales",
+            ]
+            cols_show = [c for c in preferred_cols if c in detail_display.columns]
+            st.dataframe(
+                detail_display[cols_show] if cols_show else detail_display,
+                use_container_width=True,
+                height=450,
+                hide_index=True,
+            )
+
+            st.download_button(
+                "⬇️ Descargar detalle de etiquetado (CSV)",
+                detail_display.to_csv(index=False).encode("utf-8"),
+                f"{client}_{snapshot}_detalle_etiquetado.csv",
+                "text/csv",
+            )
+        else:
+            callout(
+                "Este snapshot parece usar el modelo anterior de tags obligatorios. "
+                "Se muestra el archivo cargado para compatibilidad.",
+                kind="warning",
+            )
+            st.dataframe(detail_df, use_container_width=True, height=450, hide_index=True)
+    else:
+        empty_state("Sin detalle de etiquetado. Verifica que exista 02-detalle-etiquetado.csv.")
 
     if tags_val is not None and not tags_val.empty:
-        section_header("Tags con formato inválido")
-        st.caption("Tags presentes pero que no cumplen el patrón del estándar (CC-####, regex de email, catálogos cerrados)")
+        st.divider()
+        section_header("Validación de formato", "Vista opcional: etiquetas presentes con formato inconsistente.")
         st.dataframe(tags_val, use_container_width=True, hide_index=True)
 
 # ----------------------------------------------------------------------------
@@ -1759,22 +1901,38 @@ with tab_data:
 # TAB: TENDENCIAS (multi-snapshot)
 # ----------------------------------------------------------------------------
 with tab_trend:
-    callout("Evolución del entorno snapshot a snapshot: crecimiento, mejoras en cobertura de tags, hallazgos remediados o nuevos. Requiere al menos 2 corridas del runner.", kind="info")
+    callout(
+        "Evolución del entorno snapshot a snapshot: crecimiento de recursos, cobertura real de etiquetado, "
+        "etiquetas aplicadas, hallazgos de seguridad y recursos ociosos. Requiere al menos 2 corridas del runner.",
+        kind="info",
+    )
+
     section_header("Tendencias entre Snapshots")
     st.caption("Compara la evolución del entorno acumulando varias ejecuciones del runner.")
 
     if len(snapshots) < 2:
-        st.info("ℹ️ Necesitas al menos 2 snapshots para ver tendencias. "
-                f"Actualmente tienes 1 snapshot para `{client}`.")
+        st.info(
+            "ℹ️ Necesitas al menos 2 snapshots para ver tendencias. "
+            f"Actualmente tienes 1 snapshot para `{client}`."
+        )
     else:
-        # Agregar metricas de cada snapshot
         trend_data = []
+
         for snap in sorted(snapshots):
             snap_csv = client_path / snap / "csv"
             if not snap_csv.exists():
                 continue
+
             inv = load_csv(snap_csv, "01-inventario-maestro.csv")
-            cob = load_csv(snap_csv, "02-cobertura-por-suscripcion.csv")
+
+            # Nueva lógica de etiquetado
+            tag_cov = load_csv(snap_csv, "01-cobertura-etiquetado.csv")
+            tag_detail = load_csv(snap_csv, "02-detalle-etiquetado.csv")
+            tag_inventory = load_csv(snap_csv, "03-inventario-tags.csv")
+
+            # Fallback temporal por si algún snapshot viejo no tiene los nuevos archivos
+            old_tag_cov = load_csv(snap_csv, "02-cobertura-por-suscripcion.csv")
+
             d_orf = load_csv(snap_csv, "01-discos-no-asociados.csv")
             i_huer = load_csv(snap_csv, "02-public-ips-huerfanas.csv")
             n_orf = load_csv(snap_csv, "03-nics-sin-vm.csv")
@@ -1783,51 +1941,160 @@ with tab_trend:
             nsg_data = load_csv(snap_csv, "01-nsgs-reglas-permisivas.csv")
             pub_vms = load_csv(snap_csv, "02-vms-con-ip-publica.csv")
 
+            cobertura_etiquetado = 0
+            recursos_con_etiquetas = 0
+            recursos_sin_etiquetas = 0
+            total_etiquetas_aplicadas = 0
+            promedio_tags_por_recurso = 0
+            etiquetas_unicas = 0
+
+            if tag_cov is not None and not tag_cov.empty:
+                row = tag_cov.iloc[0]
+
+                cobertura_etiquetado = float(row.get("CoberturaEtiquetadoPct", 0) or 0)
+                recursos_con_etiquetas = int(row.get("RecursosConEtiquetas", 0) or 0)
+                recursos_sin_etiquetas = int(row.get("RecursosSinEtiquetas", 0) or 0)
+                total_etiquetas_aplicadas = int(row.get("TotalEtiquetasAplicadas", 0) or 0)
+                promedio_tags_por_recurso = float(row.get("PromedioEtiquetasPorRecurso", 0) or 0)
+
+            elif old_tag_cov is not None and not old_tag_cov.empty and "CoberturaPct" in old_tag_cov.columns:
+                # Compatibilidad con snapshots anteriores
+                cobertura_etiquetado = float(old_tag_cov["CoberturaPct"].mean())
+
+            if tag_inventory is not None and not tag_inventory.empty:
+                etiquetas_unicas = len(tag_inventory)
+
+            elif tag_detail is not None and not tag_detail.empty and "tagsActuales" in tag_detail.columns:
+                etiquetas_unicas = 0
+
             trend_data.append({
                 "snapshot": snap,
                 "recursos": safe_len(inv),
-                "cobertura_tags": (cob["CoberturaPct"].mean()
-                                   if cob is not None and not cob.empty
-                                   and "CoberturaPct" in cob.columns else 0),
-                "waste": (safe_len(d_orf) + safe_len(i_huer) + safe_len(n_orf)
-                          + safe_len(v_off) + safe_len(s_old)),
+                "cobertura_etiquetado_pct": cobertura_etiquetado,
+                "recursos_con_etiquetas": recursos_con_etiquetas,
+                "recursos_sin_etiquetas": recursos_sin_etiquetas,
+                "total_etiquetas_aplicadas": total_etiquetas_aplicadas,
+                "promedio_tags_por_recurso": promedio_tags_por_recurso,
+                "etiquetas_unicas": etiquetas_unicas,
+                "waste": (
+                    safe_len(d_orf)
+                    + safe_len(i_huer)
+                    + safe_len(n_orf)
+                    + safe_len(v_off)
+                    + safe_len(s_old)
+                ),
                 "seguridad": safe_len(nsg_data) + safe_len(pub_vms),
             })
 
-        if trend_data:
+        if not trend_data:
+            empty_state("No se pudo construir información histórica de tendencias.")
+        else:
             trend_df = pd.DataFrame(trend_data)
 
             c1, c2 = st.columns(2)
+
             with c1:
-                fig = px.line(trend_df, x="snapshot", y="recursos",
-                              markers=True, title="Total de recursos",
-                              color_discrete_sequence=[COLOR_PRIMARY])
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="recursos",
+                    markers=True,
+                    title="Total de recursos",
+                    color_discrete_sequence=[COLOR_PRIMARY],
+                )
                 fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig, use_container_width=True)
 
-                fig = px.line(trend_df, x="snapshot", y="cobertura_tags",
-                              markers=True, title="Cobertura de tags (%)",
-                              color_discrete_sequence=[COLOR_OK])
-                fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10),
-                                  yaxis_range=[0, 105])
-                fig.add_hline(y=95, line_dash="dash", line_color=COLOR_NEUTRAL)
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="cobertura_etiquetado_pct",
+                    markers=True,
+                    title="Cobertura real de etiquetado (%)",
+                    color_discrete_sequence=[COLOR_OK],
+                )
+                fig.update_layout(
+                    height=300,
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    yaxis_range=[0, 105],
+                    yaxis_title="Cobertura (%)",
+                    xaxis_title="Snapshot",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="total_etiquetas_aplicadas",
+                    markers=True,
+                    title="Total de etiquetas aplicadas",
+                    color_discrete_sequence=[COLOR_PRIMARY],
+                )
+                fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig, use_container_width=True)
 
             with c2:
-                fig = px.line(trend_df, x="snapshot", y="waste",
-                              markers=True, title="Recursos huérfanos (waste)",
-                              color_discrete_sequence=[COLOR_WARN])
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="recursos_sin_etiquetas",
+                    markers=True,
+                    title="Recursos sin etiquetas",
+                    color_discrete_sequence=[COLOR_DANGER],
+                )
                 fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig, use_container_width=True)
 
-                fig = px.line(trend_df, x="snapshot", y="seguridad",
-                              markers=True, title="Hallazgos de seguridad",
-                              color_discrete_sequence=[COLOR_DANGER])
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="promedio_tags_por_recurso",
+                    markers=True,
+                    title="Promedio de etiquetas por recurso",
+                    color_discrete_sequence=[COLOR_WARN],
+                )
                 fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig, use_container_width=True)
 
-            st.dataframe(trend_df, use_container_width=True, hide_index=True)
+                fig = px.line(
+                    trend_df,
+                    x="snapshot",
+                    y="etiquetas_unicas",
+                    markers=True,
+                    title="Etiquetas únicas detectadas",
+                    color_discrete_sequence=[COLOR_NEUTRAL],
+                )
+                fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig, use_container_width=True)
 
+            st.divider()
+
+            section_header("Tabla histórica de tendencias")
+            trend_display = trend_df.rename(columns={
+                "snapshot": "Snapshot",
+                "recursos": "Recursos",
+                "cobertura_etiquetado_pct": "Cobertura etiquetado %",
+                "recursos_con_etiquetas": "Recursos con etiquetas",
+                "recursos_sin_etiquetas": "Recursos sin etiquetas",
+                "total_etiquetas_aplicadas": "Total etiquetas aplicadas",
+                "promedio_tags_por_recurso": "Promedio tags/recurso",
+                "etiquetas_unicas": "Etiquetas únicas",
+                "waste": "Recursos ociosos",
+                "seguridad": "Hallazgos seguridad",
+            })
+
+            st.dataframe(
+                trend_display,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.download_button(
+                "⬇️ Descargar tendencias (CSV)",
+                trend_display.to_csv(index=False).encode("utf-8"),
+                f"{client}_{snapshot}_tendencias.csv",
+                "text/csv",
+            )
 # ============================================================================
 # FOOTER
 # ============================================================================

@@ -1,0 +1,38 @@
+[
+  {
+    "subscriptionId": "720bb4fd-9e4d-4525-95e6-3f6dfcfc6c78",
+    "resourceGroup": "rgprotgprod",
+    "nsgName": "vmContpaqnsg231",
+    "ruleName": "PuertoSQL",
+    "priority": 310,
+    "protocol": "TCP",
+    "sourceAddressPrefix": "*",
+    "destinationPortRange": "1433",
+    "environment": "",
+    "owner": ""
+  },
+  {
+    "subscriptionId": "b428f40f-25ce-4000-b888-b850b9ffd789",
+    "resourceGroup": "glpi-protg",
+    "nsgName": "vm-glpi-nsg",
+    "ruleName": "SSH",
+    "priority": 300,
+    "protocol": "TCP",
+    "sourceAddressPrefix": "*",
+    "destinationPortRange": "22",
+    "environment": "Production",
+    "owner": ""
+  },
+  {
+    "subscriptionId": "720bb4fd-9e4d-4525-95e6-3f6dfcfc6c78",
+    "resourceGroup": "rgprotgprod",
+    "nsgName": "vmDataBase-nsg",
+    "ruleName": "MySQL_3306",
+    "priority": 1010,
+    "protocol": "*",
+    "sourceAddressPrefix": "*",
+    "destinationPortRange": "3306",
+    "environment": "",
+    "owner": ""
+  }
+]

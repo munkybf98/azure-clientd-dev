@@ -1,0 +1,9 @@
+{
+  "TotalRecursos": 140,
+  "RecursosConEtiquetas": 43,
+  "RecursosSinEtiquetas": 97,
+  "TotalEtiquetasAplicadas": 104,
+  "PromedioEtiquetasPorRecurso": 1.27,
+  "MaxEtiquetasEnUnRecurso": 4,
+  "CoberturaEtiquetadoPct": 30.71
+}
