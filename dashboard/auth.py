@@ -9,23 +9,16 @@ Uso:
 
 from __future__ import annotations
 
-import os
 import time
-from pathlib import Path
 
 import streamlit as st
-from dotenv import load_dotenv
-
 
 # ============================================================================
 # Configuración
 # ============================================================================
 
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=ENV_PATH)
-
-APP_USER = os.getenv("APP_USER")
-APP_PASSWORD = os.getenv("APP_PASSWORD")
+APP_USER = st.secrets.get("APP_USER", "")
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
 
 SESSION_TIMEOUT_SECONDS = 3600
 
